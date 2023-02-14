@@ -9,7 +9,9 @@ PROFILE = #-pg
 OPENMP = #-fopenmp
 
 # Edit the SRA_INCLUDE_PATH to point to the SRA toolkit on your system
-SRA_PATH = SRA
+# SRA_PATH = SRA
+SRA_PATH = ${CONDA_PREFIX}
+# SRA_PATH = ngs-sdk.3.0.1-linux
 
 INC = -I. -I$(SRA_PATH)/include
 

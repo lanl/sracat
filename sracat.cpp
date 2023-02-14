@@ -24,6 +24,10 @@ int main(int argc, char *argv[])
 
 		struct option long_opts[] = {
 			{"qual", false, &config_opt, 1},
+			{"unaligned-only", false, &config_opt, 2},
+			{"aligned-only", false, &config_opt, 3},
+			{"fully-aligned-only", false, &config_opt, 4},
+			{"partially-aligned-only", false, &config_opt, 5},
 			{0,0,0,0} // Terminate options list
 		};
 
@@ -34,6 +38,10 @@ int main(int argc, char *argv[])
 		bool verbose = false;
 		bool qual = false; // fasta by default, but switch to fastq if quality scores are requested
 		bool compress_output = false;
+		bool unaligned_only = false;
+		bool aligned_only = false;
+		bool fully_aligned_only = false;
+		bool partially_aligned_only = false;
 		string output_prefix;
 		deque<string> sra_records;
 
@@ -43,19 +51,26 @@ int main(int argc, char *argv[])
 				case 0:
 
 					if(config_opt == 1){ // qual
-				
 						qual = true;
-						break;
+					} else if (config_opt == 2) {
+						unaligned_only = true;
+					} else if (config_opt == 3) {
+						aligned_only = true;
+					} else if (config_opt == 4) {
+						fully_aligned_only = true;
+					} else if (config_opt == 5) {
+						partially_aligned_only = true;
+					} else {
+						cerr << "Unknown command line flag!" << endl;
+						return EXIT_FAILURE;
 					}
-					
-					cerr << "Unknown command line flag!" << endl;
-					return EXIT_FAILURE;
+					break;
+
 				case 'o':
 					output_prefix = optarg;
 					break;
 				case 'h':
 				case '?':
-
 					print_usage = true;
 					break;
 				case 'v':
@@ -80,6 +95,10 @@ int main(int argc, char *argv[])
 			cerr << "\t[-o <output file *prefix*>] (default is stdout)" << endl;
 			cerr << "\t[-z] (zlib-based compression of file-based output; default is no compression)" << endl;
 			cerr << "\t[--qual] (fastq output)" << endl;
+			cerr << "\t[--unaligned-only] (only output unaligned reads)" << endl;
+			cerr << "\t[--aligned-only] (only output aligned reads)" << endl;
+			cerr << "\t[--fully-aligned-only] (only output fully aligned reads)" << endl;
+			cerr << "\t[--partially-aligned-only] (only output partially aligned reads)" << endl;
 			cerr << "\t<SRA accession/file 1> ..." << endl;
 
 			return EXIT_SUCCESS;
@@ -101,10 +120,24 @@ int main(int argc, char *argv[])
 
 			string verbose_buffer;
 
-			const size_t num_read = run.getReadCount(ngs::Read::all);
+			ngs::Read::ReadCategory categories;
+			if (unaligned_only) {
+				categories = ngs::Read::unaligned;
+			} else if (aligned_only) {
+				categories = ngs::Read::aligned;
+			} else if (fully_aligned_only) {
+				categories = ngs::Read::fullyAligned;
+			} else if (partially_aligned_only) {
+				categories = ngs::Read::partiallyAligned;
+			} else {
+				categories = ngs::Read::all;
+			}
+			// cout << "categories: " << categories << endl;
 
-			ngs::ReadIterator run_iter = 
-				ngs::ReadIterator( run.getReadRange ( 1, num_read, ngs::Read::all ) );
+			size_t const num_read = run.getReadCount( categories );
+			ngs::ReadIterator run_iter = run.getReads ( categories );
+			
+			// cout << "num_read: " << num_read << endl;
 
 			size_t read_count = 0;
 			size_t total_read_count = 0;
@@ -168,12 +201,21 @@ int main(int argc, char *argv[])
 						const ngs::StringRef &phred_q = run_iter.getFragmentQualities();
 
 						if(out == NULL){
-							printf( "@%s.%lu.%lu\n%s\n+\n%s\n", accession_name.c_str(), read_count, seq_count, 
-								seq.toString().c_str(), phred_q.toString().c_str() );
+							printf( "@%s.%s.%lu\n%s\n+\n%s\n",
+								accession_name.c_str(),
+								run_iter.getReadName().toString().c_str(),
+								seq_count,
+								seq.toString().c_str(),
+								phred_q.toString().c_str() );
 						}
 						else{
-							gzprintf( out, "@%s.%lu\n%s\n+\n%s\n", accession_name.c_str(), read_count, 
-								seq.toString().c_str(), phred_q.toString().c_str() );
+							gzprintf( out,
+								"@%s.%s.%lu\n%s\n+\n%s\n",
+								accession_name.c_str(),
+								run_iter.getReadName().toString().c_str(),
+								seq_count,
+								seq.toString().c_str(),
+								phred_q.toString().c_str() );
 						}
 
 						//out << "@" << accession_name << '.' << read_count << '.' << seq_count << '\n' << seq << '\n';
@@ -184,11 +226,18 @@ int main(int argc, char *argv[])
 
 						// fasta output
 						if(out == NULL){
-							printf( ">%s.%lu.%lu\n%s\n", accession_name.c_str(), read_count, seq_count, 
+							printf( ">%s.%s.%lu\n%s\n",
+								accession_name.c_str(),
+								run_iter.getReadName().toString().c_str(),
+								seq_count,
 								seq.toString().c_str() );
 						}
 						else{
-							gzprintf( out, ">%s.%lu\n%s\n", accession_name.c_str(), read_count, 
+							gzprintf( out,
+								">%s.%s.%lu\n%s\n",
+								accession_name.c_str(),
+								run_iter.getReadName().toString().c_str(),
+								seq_count,
 								seq.toString().c_str() );
 						}
 
